@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="健康管理">
+  <meta name="theme-color" content="#0ea5e9">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>健康管理アプリ</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- ヘッダー -->
+  <header class="app-header">
+    <h1 class="app-title">🏃 健康管理</h1>
+    <span class="today-date" id="todayDate"></span>
+  </header>
+
+  <!-- ナビゲーション -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-tab="dashboard" onclick="showTab('dashboard')">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">ホーム</span>
+    </button>
+    <button class="nav-btn" data-tab="weight" onclick="showTab('weight')">
+      <span class="nav-icon">⚖️</span>
+      <span class="nav-label">体重</span>
+    </button>
+    <button class="nav-btn" data-tab="meal" onclick="showTab('meal')">
+      <span class="nav-icon">🍽️</span>
+      <span class="nav-label">食事</span>
+    </button>
+    <button class="nav-btn" data-tab="exercise" onclick="showTab('exercise')">
+      <span class="nav-icon">💪</span>
+      <span class="nav-label">運動</span>
+    </button>
+    <button class="nav-btn" data-tab="sleep" onclick="showTab('sleep')">
+      <span class="nav-icon">😴</span>
+      <span class="nav-label">睡眠</span>
+    </button>
+  </nav>
+
+  <!-- メインコンテンツ -->
+  <main class="main-content">
+
+    <!-- ダッシュボード -->
+    <section id="tab-dashboard" class="tab-section active">
+      <div class="section-title">今日のサマリー</div>
+
+      <div class="summary-grid">
+        <div class="summary-card weight-card">
+          <div class="card-icon">⚖️</div>
+          <div class="card-value" id="dash-weight">--</div>
+          <div class="card-unit">kg</div>
+          <div class="card-label">体重</div>
+        </div>
+        <div class="summary-card bmi-card">
+          <div class="card-icon">📊</div>
+          <div class="card-value" id="dash-bmi">--</div>
+          <div class="card-unit">BMI</div>
+          <div class="card-label" id="dash-bmi-label">--</div>
+        </div>
+        <div class="summary-card calorie-card">
+          <div class="card-icon">🍽️</div>
+          <div class="card-value" id="dash-calories">0</div>
+          <div class="card-unit">kcal</div>
+          <div class="card-label">今日の摂取</div>
+        </div>
+        <div class="summary-card exercise-card">
+          <div class="card-icon">💪</div>
+          <div class="card-value" id="dash-exercise">0</div>
+          <div class="card-unit">kcal</div>
+          <div class="card-label">今日の消費</div>
+        </div>
+        <div class="summary-card sleep-card">
+          <div class="card-icon">😴</div>
+          <div class="card-value" id="dash-sleep">--</div>
+          <div class="card-unit">時間</div>
+          <div class="card-label">昨夜の睡眠</div>
+        </div>
+        <div class="summary-card balance-card">
+          <div class="card-icon">⚡</div>
+          <div class="card-value" id="dash-balance">0</div>
+          <div class="card-unit">kcal</div>
+          <div class="card-label" id="dash-balance-label">カロリー収支</div>
+        </div>
+      </div>
+
+      <!-- 体重グラフ -->
+      <div class="chart-container">
+        <div class="chart-title">📈 体重推移（直近30日）</div>
+        <canvas id="weightChart"></canvas>
+      </div>
+
+      <!-- カロリーグラフ -->
+      <div class="chart-container">
+        <div class="chart-title">🍽️ カロリー推移（直近7日）</div>
+        <canvas id="calorieChart"></canvas>
+      </div>
+
+      <!-- 睡眠グラフ -->
+      <div class="chart-container">
+        <div class="chart-title">😴 睡眠時間推移（直近7日）</div>
+        <canvas id="sleepChart"></canvas>
+      </div>
+    </section>
+
+    <!-- 体重管理 -->
+    <section id="tab-weight" class="tab-section">
+      <div class="section-title">⚖️ 体重・BMI管理</div>
+
+      <!-- 身長設定 -->
+      <div class="card">
+        <div class="card-header">身長設定</div>
+        <div class="input-row">
+          <label>身長</label>
+          <div class="input-with-unit">
+            <input type="number" id="heightInput" placeholder="170" min="100" max="250" step="0.1">
+            <span class="unit-label">cm</span>
+          </div>
+          <button class="btn-save" onclick="saveHeight()">保存</button>
+        </div>
+      </div>
+
+      <!-- 体重入力 -->
+      <div class="card">
+        <div class="card-header">体重を記録</div>
+        <div class="input-row">
+          <label>体重</label>
+          <div class="input-with-unit">
+            <input type="number" id="weightInput" placeholder="65.0" min="20" max="300" step="0.1">
+            <span class="unit-label">kg</span>
+          </div>
+        </div>
+        <div class="input-row">
+          <label>日付</label>
+          <input type="date" id="weightDate">
+        </div>
+        <button class="btn-primary" onclick="addWeight()">記録する</button>
+      </div>
+
+      <!-- BMI表示 -->
+      <div class="card bmi-display" id="bmiDisplay" style="display:none">
+        <div class="bmi-value-large" id="bmiValueLarge">--</div>
+        <div class="bmi-label-large" id="bmiLabelLarge">--</div>
+        <div class="bmi-scale">
+          <div class="bmi-range underweight">痩せ<br>&lt;18.5</div>
+          <div class="bmi-range normal">普通<br>18.5-25</div>
+          <div class="bmi-range overweight">過体重<br>25-30</div>
+          <div class="bmi-range obese">肥満<br>&gt;30</div>
+        </div>
+      </div>
+
+      <!-- 体重履歴 -->
+      <div class="card">
+        <div class="card-header">記録履歴</div>
+        <div id="weightHistory" class="history-list">
+          <div class="empty-state">まだ記録がありません</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 食事管理 -->
+    <section id="tab-meal" class="tab-section">
+      <div class="section-title">🍽️ 食事・カロリー管理</div>
+
+      <!-- 目標カロリー設定 -->
+      <div class="card">
+        <div class="card-header">1日の目標カロリー</div>
+        <div class="input-row">
+          <label>目標</label>
+          <div class="input-with-unit">
+            <input type="number" id="targetCalorieInput" placeholder="2000" min="500" max="5000" step="50">
+            <span class="unit-label">kcal</span>
+          </div>
+          <button class="btn-save" onclick="saveTargetCalorie()">保存</button>
+        </div>
+        <div class="calorie-progress-container">
+          <div class="calorie-progress-bar">
+            <div class="calorie-progress-fill" id="calorieProgressFill"></div>
+          </div>
+          <div class="calorie-progress-text" id="calorieProgressText">0 / 0 kcal</div>
+        </div>
+      </div>
+
+      <!-- 食事入力 -->
+      <div class="card">
+        <div class="card-header">食事を記録</div>
+        <div class="input-row">
+          <label>食事名</label>
+          <input type="text" id="mealName" placeholder="例：ご飯、サラダ">
+        </div>
+        <div class="input-row">
+          <label>カロリー</label>
+          <div class="input-with-unit">
+            <input type="number" id="mealCalorie" placeholder="500" min="0" max="5000">
+            <span class="unit-label">kcal</span>
+          </div>
+        </div>
+        <div class="input-row">
+          <label>食事タイプ</label>
+          <select id="mealType">
+            <option value="朝食">🌅 朝食</option>
+            <option value="昼食">☀️ 昼食</option>
+            <option value="夕食">🌙 夕食</option>
+            <option value="間食">🍪 間食</option>
+          </select>
+        </div>
+        <div class="input-row">
+          <label>日付</label>
+          <input type="date" id="mealDate">
+        </div>
+        <button class="btn-primary" onclick="addMeal()">記録する</button>
+      </div>
+
+      <!-- よく食べるもの（クイック入力） -->
+      <div class="card">
+        <div class="card-header">クイック入力</div>
+        <div class="quick-foods" id="quickFoods">
+          <button class="quick-food-btn" onclick="quickAdd('ご飯(茶碗1杯)', 252)">🍚 ご飯<br>252kcal</button>
+          <button class="quick-food-btn" onclick="quickAdd('食パン(1枚)', 158)">🍞 食パン<br>158kcal</button>
+          <button class="quick-food-btn" onclick="quickAdd('卵(1個)', 76)">🥚 卵<br>76kcal</button>
+          <button class="quick-food-btn" onclick="quickAdd('牛乳(200ml)', 122)">🥛 牛乳<br>122kcal</button>
+          <button class="quick-food-btn" onclick="quickAdd('バナナ(1本)', 86)">🍌 バナナ<br>86kcal</button>
+          <button class="quick-food-btn" onclick="quickAdd('コーヒー(無糖)', 4)">☕ コーヒー<br>4kcal</button>
+          <button class="quick-food-btn" onclick="quickAdd('サラダ', 30)">🥗 サラダ<br>30kcal</button>
+          <button class="quick-food-btn" onclick="quickAdd('ラーメン', 450)">🍜 ラーメン<br>450kcal</button>
+        </div>
+      </div>
+
+      <!-- 今日の食事履歴 -->
+      <div class="card">
+        <div class="card-header">今日の食事</div>
+        <div id="todayMeals" class="history-list">
+          <div class="empty-state">まだ記録がありません</div>
+        </div>
+        <div class="total-calories" id="todayTotalCalories">合計: 0 kcal</div>
+      </div>
+
+      <!-- 食事履歴 -->
+      <div class="card">
+        <div class="card-header">過去の記録</div>
+        <div id="mealHistory" class="history-list">
+          <div class="empty-state">まだ記録がありません</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 運動管理 -->
+    <section id="tab-exercise" class="tab-section">
+      <div class="section-title">💪 運動管理</div>
+
+      <!-- 運動入力 -->
+      <div class="card">
+        <div class="card-header">運動を記録</div>
+        <div class="input-row">
+          <label>運動の種類</label>
+          <select id="exerciseType">
+            <option value="ウォーキング">🚶 ウォーキング</option>
+            <option value="ランニング">🏃 ランニング</option>
+            <option value="サイクリング">🚴 サイクリング</option>
+            <option value="水泳">🏊 水泳</option>
+            <option value="筋トレ">🏋️ 筋トレ</option>
+            <option value="ヨガ">🧘 ヨガ</option>
+            <option value="ストレッチ">🤸 ストレッチ</option>
+            <option value="その他">⚡ その他</option>
+          </select>
+        </div>
+        <div class="input-row">
+          <label>時間</label>
+          <div class="input-with-unit">
+            <input type="number" id="exerciseDuration" placeholder="30" min="1" max="600">
+            <span class="unit-label">分</span>
+          </div>
+        </div>
+        <div class="input-row">
+          <label>消費カロリー</label>
+          <div class="input-with-unit">
+            <input type="number" id="exerciseCalorie" placeholder="150" min="0" max="3000">
+            <span class="unit-label">kcal</span>
+          </div>
+        </div>
+        <div class="input-row">
+          <label>メモ</label>
+          <input type="text" id="exerciseMemo" placeholder="例：公園を3周">
+        </div>
+        <div class="input-row">
+          <label>日付</label>
+          <input type="date" id="exerciseDate">
+        </div>
+        <button class="btn-primary" onclick="addExercise()">記録する</button>
+      </div>
+
+      <!-- 運動カロリー計算ガイド -->
+      <div class="card">
+        <div class="card-header">消費カロリー目安（体重60kgの場合）</div>
+        <div class="calorie-guide">
+          <div class="guide-item"><span>🚶 ウォーキング</span><span>約3kcal/分</span></div>
+          <div class="guide-item"><span>🏃 ランニング</span><span>約7kcal/分</span></div>
+          <div class="guide-item"><span>🚴 サイクリング</span><span>約5kcal/分</span></div>
+          <div class="guide-item"><span>🏊 水泳</span><span>約8kcal/分</span></div>
+          <div class="guide-item"><span>🏋️ 筋トレ</span><span>約5kcal/分</span></div>
+          <div class="guide-item"><span>🧘 ヨガ</span><span>約3kcal/分</span></div>
+        </div>
+      </div>
+
+      <!-- 今日の運動 -->
+      <div class="card">
+        <div class="card-header">今日の運動</div>
+        <div id="todayExercises" class="history-list">
+          <div class="empty-state">まだ記録がありません</div>
+        </div>
+        <div class="total-calories" id="todayTotalExercise">合計消費: 0 kcal</div>
+      </div>
+
+      <!-- 運動履歴 -->
+      <div class="card">
+        <div class="card-header">過去の記録</div>
+        <div id="exerciseHistory" class="history-list">
+          <div class="empty-state">まだ記録がありません</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 睡眠管理 -->
+    <section id="tab-sleep" class="tab-section">
+      <div class="section-title">😴 睡眠管理</div>
+
+      <!-- 睡眠目標 -->
+      <div class="card">
+        <div class="card-header">睡眠目標</div>
+        <div class="input-row">
+          <label>目標睡眠時間</label>
+          <div class="input-with-unit">
+            <input type="number" id="targetSleepInput" placeholder="7" min="4" max="12" step="0.5">
+            <span class="unit-label">時間</span>
+          </div>
+          <button class="btn-save" onclick="saveTargetSleep()">保存</button>
+        </div>
+      </div>
+
+      <!-- 睡眠入力 -->
+      <div class="card">
+        <div class="card-header">睡眠を記録</div>
+        <div class="input-row">
+          <label>就寝時刻</label>
+          <input type="time" id="sleepStart" value="23:00">
+        </div>
+        <div class="input-row">
+          <label>起床時刻</label>
+          <input type="time" id="sleepEnd" value="07:00">
+        </div>
+        <div class="input-row">
+          <label>日付（起床日）</label>
+          <input type="date" id="sleepDate">
+        </div>
+        <div class="input-row">
+          <label>睡眠の質</label>
+          <div class="quality-selector" id="qualitySelector">
+            <button class="quality-btn" data-quality="1" onclick="selectQuality(1)">😫<br>最悪</button>
+            <button class="quality-btn" data-quality="2" onclick="selectQuality(2)">😕<br>悪い</button>
+            <button class="quality-btn active" data-quality="3" onclick="selectQuality(3)">😐<br>普通</button>
+            <button class="quality-btn" data-quality="4" onclick="selectQuality(4)">😊<br>良い</button>
+            <button class="quality-btn" data-quality="5" onclick="selectQuality(5)">😄<br>最高</button>
+          </div>
+        </div>
+        <div class="sleep-duration-preview" id="sleepDurationPreview">睡眠時間: -- 時間</div>
+        <button class="btn-primary" onclick="addSleep()">記録する</button>
+      </div>
+
+      <!-- 睡眠統計 -->
+      <div class="card">
+        <div class="card-header">睡眠統計（直近7日）</div>
+        <div class="sleep-stats" id="sleepStats">
+          <div class="stat-item">
+            <div class="stat-value" id="avgSleep">--</div>
+            <div class="stat-label">平均睡眠時間</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="avgQuality">--</div>
+            <div class="stat-label">平均睡眠の質</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 睡眠履歴 -->
+      <div class="card">
+        <div class="card-header">睡眠履歴</div>
+        <div id="sleepHistory" class="history-list">
+          <div class="empty-state">まだ記録がありません</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- トースト通知 -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

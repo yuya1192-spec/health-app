@@ -1,0 +1,22 @@
+{
+  "name": "健康管理アプリ",
+  "short_name": "健康管理",
+  "description": "体重・食事・運動・睡眠を管理する総合健康管理アプリ",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f0f9ff",
+  "theme_color": "#0ea5e9",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
