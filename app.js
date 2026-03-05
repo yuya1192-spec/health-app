@@ -72,6 +72,10 @@ function loadSettings() {
   const settings = DB.getObj('settings');
   if (settings.height) {
     document.getElementById('heightInput').value = settings.height;
+  } else {
+    // 身長未設定のときはアコーディオンを開いておく
+    document.getElementById('heightAccordionBody').classList.add('open');
+    document.getElementById('heightAccordionIcon').classList.add('open');
   }
   if (settings.targetCalorie) {
     document.getElementById('targetCalorieInput').value = settings.targetCalorie;
@@ -79,6 +83,12 @@ function loadSettings() {
   if (settings.targetSleep) {
     document.getElementById('targetSleepInput').value = settings.targetSleep;
   }
+  // プロフィール
+  document.getElementById('ageInput').value = settings.age || 37;
+  document.getElementById('activityInput').value = settings.activityFactor || 1.3;
+  document.getElementById('proteinRatioInput').value = settings.proteinRatio || 1.7;
+  document.getElementById('fatRatioInput').value = settings.fatRatio || 1.0;
+  updatePFCRecommend();
 }
 
 // ===== タブ切り替え =====
@@ -156,77 +166,131 @@ function getDateBefore(dateStr, days) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-// ===== 体重グラフ =====
+// ===== 体重グラフ（カロリー棒グラフ重ね表示） =====
 function updateWeightChart() {
   const weights = DB.get('weights');
+  const meals = DB.get('meals');
   const today = getTodayStr();
   const days = 30;
 
   const labels = [];
-  const data = [];
+  const weightData = [];
+  const calorieData = [];
 
   for (let i = days - 1; i >= 0; i--) {
     const dateStr = getDateBefore(today, i);
     labels.push(formatDateShort(dateStr));
     const entry = weights.find(w => w.date === dateStr);
-    data.push(entry ? entry.weight : null);
+    weightData.push(entry ? entry.weight : null);
+    const dayCalories = meals.filter(m => m.date === dateStr).reduce((s, m) => s + m.calorie, 0);
+    calorieData.push(dayCalories > 0 ? dayCalories : null);
   }
 
   const ctx = document.getElementById('weightChart').getContext('2d');
   if (weightChart) weightChart.destroy();
 
   weightChart = new Chart(ctx, {
-    type: 'line',
+    type: 'bar',
     data: {
       labels,
-      datasets: [{
-        label: '体重 (kg)',
-        data,
-        borderColor: '#0ea5e9',
-        backgroundColor: 'rgba(14,165,233,0.1)',
-        borderWidth: 2.5,
-        pointRadius: 4,
-        pointBackgroundColor: '#0ea5e9',
-        fill: true,
-        tension: 0.3,
-        spanGaps: true
-      }]
+      datasets: [
+        {
+          type: 'bar',
+          label: 'カロリー摂取 (kcal)',
+          data: calorieData,
+          backgroundColor: 'rgba(245,158,11,0.35)',
+          borderColor: 'rgba(245,158,11,0.6)',
+          borderWidth: 1,
+          borderRadius: 3,
+          yAxisID: 'yCalorie',
+          order: 2
+        },
+        {
+          type: 'line',
+          label: '体重 (kg)',
+          data: weightData,
+          borderColor: '#0ea5e9',
+          backgroundColor: 'rgba(14,165,233,0.1)',
+          borderWidth: 2.5,
+          pointRadius: 4,
+          pointBackgroundColor: '#0ea5e9',
+          fill: true,
+          tension: 0.3,
+          spanGaps: true,
+          yAxisID: 'yWeight',
+          order: 1
+        }
+      ]
     },
     options: {
       responsive: true,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: { font: { size: 11 }, boxWidth: 12 }
+        }
+      },
       scales: {
         x: {
           ticks: { maxTicksLimit: 8, font: { size: 10 } },
           grid: { display: false }
         },
-        y: {
+        yWeight: {
+          type: 'linear',
+          position: 'left',
           ticks: { font: { size: 10 } },
-          grid: { color: 'rgba(0,0,0,0.05)' }
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          title: { display: true, text: 'kg', font: { size: 10 } }
+        },
+        yCalorie: {
+          type: 'linear',
+          position: 'right',
+          ticks: { font: { size: 10 } },
+          grid: { display: false },
+          title: { display: true, text: 'kcal', font: { size: 10 } }
         }
       }
     }
   });
 }
 
-// ===== カロリーグラフ =====
+// ===== カロリーグラフ（PFC積み上げ） =====
 function updateCalorieChart() {
   const meals = DB.get('meals');
   const exercises = DB.get('exercises');
   const today = getTodayStr();
   const days = 7;
 
+  const settings = DB.getObj('settings');
+  const targetCalorie = settings.targetCalorie || null;
+
   const labels = [];
-  const intakeData = [];
+  const proteinKcal = [];
+  const fatKcal = [];
+  const carbKcal = [];
+  const otherKcal = [];
   const burnData = [];
+  const targetLine = [];
 
   for (let i = days - 1; i >= 0; i--) {
     const dateStr = getDateBefore(today, i);
     labels.push(formatDateShort(dateStr));
     const dayMeals = meals.filter(m => m.date === dateStr);
     const dayExercises = exercises.filter(e => e.date === dateStr);
-    intakeData.push(dayMeals.reduce((s, m) => s + m.calorie, 0));
-    burnData.push(dayExercises.reduce((s, e) => s + e.calorie, 0));
+
+    const totalCal = dayMeals.reduce((s, m) => s + m.calorie, 0);
+    const pKcal = Math.round(dayMeals.reduce((s, m) => s + (m.protein || 0), 0) * 4);
+    const fKcal = Math.round(dayMeals.reduce((s, m) => s + (m.fat || 0), 0) * 9);
+    const cKcal = Math.round(dayMeals.reduce((s, m) => s + (m.carb || 0), 0) * 4);
+    const other = Math.max(0, totalCal - pKcal - fKcal - cKcal);
+
+    proteinKcal.push(pKcal || null);
+    fatKcal.push(fKcal || null);
+    carbKcal.push(cKcal || null);
+    otherKcal.push(other > 0 ? other : (totalCal > 0 && pKcal === 0 && fKcal === 0 && cKcal === 0 ? totalCal : null));
+    burnData.push(dayExercises.reduce((s, e) => s + e.calorie, 0) || null);
+    targetLine.push(targetCalorie);
   }
 
   const ctx = document.getElementById('calorieChart').getContext('2d');
@@ -238,35 +302,88 @@ function updateCalorieChart() {
       labels,
       datasets: [
         {
-          label: '摂取',
-          data: intakeData,
-          backgroundColor: 'rgba(245,158,11,0.7)',
-          borderRadius: 6
+          type: 'bar',
+          label: 'タンパク質',
+          data: proteinKcal,
+          backgroundColor: 'rgba(14,165,233,0.75)',
+          stack: 'intake'
         },
         {
-          label: '消費',
+          type: 'bar',
+          label: '脂質',
+          data: fatKcal,
+          backgroundColor: 'rgba(245,158,11,0.75)',
+          stack: 'intake'
+        },
+        {
+          type: 'bar',
+          label: '炭水化物',
+          data: carbKcal,
+          backgroundColor: 'rgba(34,197,94,0.75)',
+          stack: 'intake'
+        },
+        {
+          type: 'bar',
+          label: 'その他',
+          data: otherKcal,
+          backgroundColor: 'rgba(148,163,184,0.5)',
+          stack: 'intake'
+        },
+        {
+          type: 'line',
+          label: '運動消費',
           data: burnData,
-          backgroundColor: 'rgba(34,197,94,0.7)',
-          borderRadius: 6
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99,102,241,0.1)',
+          borderWidth: 2,
+          pointRadius: 4,
+          pointBackgroundColor: '#6366f1',
+          tension: 0.3,
+          spanGaps: true,
+          yAxisID: 'yBurn'
+        },
+        {
+          type: 'line',
+          label: '目標カロリー',
+          data: targetLine,
+          borderColor: 'rgba(239,68,68,0.8)',
+          borderWidth: 2,
+          borderDash: [6, 4],
+          pointRadius: 0,
+          tension: 0,
+          yAxisID: 'y',
+          order: 0
         }
       ]
     },
     options: {
       responsive: true,
+      animation: false,
       plugins: {
         legend: {
           position: 'top',
-          labels: { font: { size: 11 }, boxWidth: 12 }
+          labels: { font: { size: 10 }, boxWidth: 10, padding: 8 }
         }
       },
       scales: {
         x: {
+          stacked: true,
           ticks: { font: { size: 10 } },
           grid: { display: false }
         },
         y: {
+          stacked: true,
           ticks: { font: { size: 10 } },
-          grid: { color: 'rgba(0,0,0,0.05)' }
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          min: 0
+        },
+        yBurn: {
+          type: 'linear',
+          position: 'right',
+          ticks: { font: { size: 10 }, color: '#6366f1' },
+          grid: { display: false },
+          title: { display: true, text: '消費', font: { size: 9 }, color: '#6366f1' },
+          min: 0
         }
       }
     }
@@ -327,7 +444,67 @@ function updateSleepChart() {
   });
 }
 
+// ===== プロフィール設定 =====
+function toggleProfileAccordion() {
+  const body = document.getElementById('profileAccordionBody');
+  const icon = document.getElementById('profileAccordionIcon');
+  const isOpen = body.classList.toggle('open');
+  icon.classList.toggle('open', isOpen);
+}
+
+function saveProfile() {
+  const settings = DB.getObj('settings');
+  settings.age = parseInt(document.getElementById('ageInput').value) || 37;
+  settings.activityFactor = parseFloat(document.getElementById('activityInput').value) || 1.3;
+  settings.proteinRatio = parseFloat(document.getElementById('proteinRatioInput').value) || 1.7;
+  settings.fatRatio = parseFloat(document.getElementById('fatRatioInput').value) || 1.0;
+  DB.set('settings', settings);
+  showToast('✅ プロフィールを保存しました');
+  updatePFCRecommend();
+}
+
+function updatePFCRecommend() {
+  const settings = DB.getObj('settings');
+  const weights = DB.get('weights');
+  if (weights.length === 0 || !settings.height) return;
+
+  const weight = weights[weights.length - 1].weight;
+  const age = settings.age || 37;
+  const activity = settings.activityFactor || 1.3;
+  const proteinRatio = settings.proteinRatio || 1.7;
+  const fatRatio = settings.fatRatio || 1.0;
+
+  // Mifflin-St Jeor (男性)
+  const bmr = 10 * weight + 6.25 * settings.height - 5 * age + 5;
+  const tdee = Math.round(bmr * activity);
+  const protein = Math.round(weight * proteinRatio);
+  const fat = Math.round(weight * fatRatio);
+  const carb = Math.max(Math.round((tdee - protein * 4 - fat * 9) / 4), 0);
+
+  // 自動で目標に保存
+  settings.targetCalorie = tdee;
+  settings.targetProtein = protein;
+  settings.targetFat = fat;
+  settings.targetCarb = carb;
+  DB.set('settings', settings);
+
+  document.getElementById('pfcRecommendBox').style.display = 'block';
+  document.getElementById('pfcTdee').textContent = `${tdee} kcal`;
+  document.getElementById('pfcP').textContent = protein;
+  document.getElementById('pfcF').textContent = fat;
+  document.getElementById('pfcC').textContent = carb;
+
+  updateCalorieProgress();
+}
+
 // ===== 体重管理 =====
+function toggleHeightAccordion() {
+  const body = document.getElementById('heightAccordionBody');
+  const icon = document.getElementById('heightAccordionIcon');
+  const isOpen = body.classList.toggle('open');
+  icon.classList.toggle('open', isOpen);
+}
+
 function saveHeight() {
   const val = parseFloat(document.getElementById('heightInput').value);
   if (!val || val < 100 || val > 250) {
@@ -391,10 +568,11 @@ function addWeight() {
   }
   DB.set('weights', weights);
 
-  document.getElementById('weightInput').value = '';
+  document.getElementById('weightInput').value = weight;
   showToast(`✅ ${weight}kg を記録しました`);
   updateBMIDisplay();
   renderWeightHistory();
+  updatePFCRecommend();
 }
 
 function renderWeightHistory() {
@@ -405,6 +583,10 @@ function renderWeightHistory() {
     container.innerHTML = '<div class="empty-state">まだ記録がありません</div>';
     return;
   }
+
+  const lastWeight = weights[weights.length - 1].weight;
+  const input = document.getElementById('weightInput');
+  if (!input.value) input.value = lastWeight;
 
   const sorted = [...weights].reverse();
   container.innerHTML = sorted.map(w => `
@@ -452,7 +634,11 @@ function saveTargetCalorie() {
 function updateCalorieProgress() {
   const today = getTodayStr();
   const meals = DB.get('meals');
-  const todayCalories = meals.filter(m => m.date === today).reduce((s, m) => s + m.calorie, 0);
+  const todayMeals = meals.filter(m => m.date === today);
+  const todayCalories = todayMeals.reduce((s, m) => s + m.calorie, 0);
+  const todayProtein = todayMeals.reduce((s, m) => s + (m.protein || 0), 0);
+  const todayFat = todayMeals.reduce((s, m) => s + (m.fat || 0), 0);
+  const todayCarb = todayMeals.reduce((s, m) => s + (m.carb || 0), 0);
   const settings = DB.getObj('settings');
   const target = settings.targetCalorie || 0;
 
@@ -466,43 +652,58 @@ function updateCalorieProgress() {
     text.textContent = `${todayCalories} / ${target} kcal`;
   } else {
     fill.style.width = '0%';
-    text.textContent = `${todayCalories} / 未設定 kcal`;
+    text.textContent = `${todayCalories} kcal`;
+  }
+
+  // PFC進捗
+  const tP = settings.targetProtein;
+  const tF = settings.targetFat;
+  const tC = settings.targetCarb;
+  if (tP && tF && tC) {
+    document.getElementById('pfcProgressList').style.display = 'flex';
+    const setPFC = (fillId, textId, val, tgt) => {
+      document.getElementById(fillId).style.width = Math.min((val / tgt) * 100, 100) + '%';
+      document.getElementById(textId).textContent = `${val.toFixed(1)} / ${tgt}g`;
+    };
+    setPFC('pfcProgressFillP', 'pfcProgressTextP', todayProtein, tP);
+    setPFC('pfcProgressFillF', 'pfcProgressTextF', todayFat, tF);
+    setPFC('pfcProgressFillC', 'pfcProgressTextC', todayCarb, tC);
   }
 }
 
 function addMeal() {
   const name = document.getElementById('mealName').value.trim();
   const calorie = parseInt(document.getElementById('mealCalorie').value);
+  const protein = parseFloat(document.getElementById('mealProtein').value) || 0;
+  const fat = parseFloat(document.getElementById('mealFat').value) || 0;
+  const carb = parseFloat(document.getElementById('mealCarb').value) || 0;
   const type = document.getElementById('mealType').value;
   const date = document.getElementById('mealDate').value;
 
-  if (!name) {
-    showToast('⚠️ 食事名を入力してください');
-    return;
-  }
-  if (!calorie || calorie < 0) {
-    showToast('⚠️ カロリーを入力してください');
-    return;
-  }
-  if (!date) {
-    showToast('⚠️ 日付を選択してください');
-    return;
-  }
+  if (!name) { showToast('⚠️ 食事名を入力してください'); return; }
+  if (!calorie || calorie < 0) { showToast('⚠️ カロリーを入力してください'); return; }
+  if (!date) { showToast('⚠️ 日付を選択してください'); return; }
 
   const meals = DB.get('meals');
-  meals.push({ id: Date.now(), date, name, calorie, type });
+  meals.push({ id: Date.now(), date, name, calorie, protein, fat, carb, type });
   DB.set('meals', meals);
 
   document.getElementById('mealName').value = '';
-  document.getElementById('mealCalorie').value = '';
+  document.getElementById('mealCalorie').value = 300;
+  document.getElementById('mealProtein').value = '';
+  document.getElementById('mealFat').value = '';
+  document.getElementById('mealCarb').value = '';
   showToast(`✅ ${name} (${calorie}kcal) を記録しました`);
   renderMealHistory();
   updateCalorieProgress();
 }
 
-function quickAdd(name, calorie) {
+function quickAdd(name, calorie, protein = 0, fat = 0, carb = 0) {
   document.getElementById('mealName').value = name;
   document.getElementById('mealCalorie').value = calorie;
+  document.getElementById('mealProtein').value = protein;
+  document.getElementById('mealFat').value = fat;
+  document.getElementById('mealCarb').value = carb;
   showToast(`📝 ${name} をセットしました`);
 }
 
@@ -530,7 +731,10 @@ function renderMealHistory() {
         <button class="btn-delete" onclick="deleteMeal(${m.id})">削除</button>
       </div>
     `).join('');
-    totalEl.textContent = `合計: ${total} kcal`;
+    const totalP = todayMeals.reduce((s, m) => s + (m.protein || 0), 0);
+    const totalF = todayMeals.reduce((s, m) => s + (m.fat || 0), 0);
+    const totalC = todayMeals.reduce((s, m) => s + (m.carb || 0), 0);
+    totalEl.textContent = `合計: ${total} kcal  P:${totalP.toFixed(1)}g F:${totalF.toFixed(1)}g C:${totalC.toFixed(1)}g`;
   }
 
   // 過去の記録（今日以外）
@@ -573,42 +777,120 @@ function deleteMeal(id) {
 }
 
 // ===== 運動管理 =====
+const WEIGHT_EXERCISE_COEFF = {
+  'ラットプルダウン': 0.020,
+  'チェストプレス':  0.020,
+  'ショルダープレス': 0.018,
+  'スクワット':      0.030,
+  '腹筋ローラー':    null   // reps×sets×0.5 kcal (bodyweight)
+};
+
+const EXERCISE_DEFAULTS = {
+  'ラットプルダウン':  { weight: 30, reps: 10, sets: 3 },
+  'チェストプレス':    { weight: 40, reps: 10, sets: 3 },
+  'ショルダープレス':  { weight: 10, reps: 10, sets: 3 },
+  'スクワット':        { weight: 60, reps: 10, sets: 3 },
+  '腹筋ローラー':      { weight: 0,  reps: 10, sets: 3 }
+};
+
+function onExerciseTypeChange() {
+  const type = document.getElementById('exerciseType').value;
+  const isWalking = type === 'ウォーキング';
+  document.getElementById('exerciseForm-walking').style.display = isWalking ? '' : 'none';
+  document.getElementById('exerciseForm-weights').style.display = isWalking ? 'none' : '';
+  document.getElementById('exerciseCalorieValue').textContent = '-- kcal';
+  document.getElementById('exerciseCalorie').value = '';
+
+  if (!isWalking) {
+    const def = EXERCISE_DEFAULTS[type] || { weight: 30, reps: 10, sets: 3 };
+    document.getElementById('exWeight').value = def.weight || '';
+    document.getElementById('exReps').value = def.reps;
+    document.getElementById('exSets').value = def.sets;
+    calcWeightCalories();
+  }
+}
+
+function calcWalkCalories() {
+  const steps = parseInt(document.getElementById('walkSteps').value) || 0;
+  const weights = DB.get('weights');
+  const bw = weights.length > 0 ? weights[weights.length - 1].weight : 65;
+  const kcal = Math.round(steps * bw * 0.0004);
+  document.getElementById('exerciseCalorieValue').textContent = kcal > 0 ? `${kcal} kcal` : '-- kcal';
+  document.getElementById('exerciseCalorie').value = kcal > 0 ? kcal : '';
+}
+
+function calcWeightCalories() {
+  const type = document.getElementById('exerciseType').value;
+  const w = parseFloat(document.getElementById('exWeight').value) || 0;
+  const r = parseInt(document.getElementById('exReps').value) || 0;
+  const s = parseInt(document.getElementById('exSets').value) || 0;
+  if (s === 0) { document.getElementById('exerciseCalorieValue').textContent = '-- kcal'; return; }
+
+  let kcal;
+  if (type === '腹筋ローラー') {
+    kcal = Math.round(r * s * 0.5);
+  } else {
+    const coeff = WEIGHT_EXERCISE_COEFF[type] || 0.020;
+    kcal = Math.round(w * r * s * coeff);
+  }
+  document.getElementById('exerciseCalorieValue').textContent = kcal > 0 ? `${kcal} kcal` : '-- kcal';
+  document.getElementById('exerciseCalorie').value = kcal > 0 ? kcal : '';
+}
+
 function addExercise() {
   const type = document.getElementById('exerciseType').value;
-  const duration = parseInt(document.getElementById('exerciseDuration').value);
   const calorie = parseInt(document.getElementById('exerciseCalorie').value);
   const memo = document.getElementById('exerciseMemo').value.trim();
   const date = document.getElementById('exerciseDate').value;
 
-  if (!duration || duration < 1) {
-    showToast('⚠️ 運動時間を入力してください');
-    return;
-  }
-  if (!calorie && calorie !== 0) {
-    showToast('⚠️ 消費カロリーを入力してください');
-    return;
-  }
-  if (!date) {
-    showToast('⚠️ 日付を選択してください');
-    return;
+  if (!calorie || calorie < 0) { showToast('⚠️ 値を入力してください'); return; }
+  if (!date) { showToast('⚠️ 日付を選択してください'); return; }
+
+  let detail = '';
+  if (type === 'ウォーキング') {
+    const steps = parseInt(document.getElementById('walkSteps').value) || 0;
+    detail = `${steps.toLocaleString()}歩`;
+  } else if (type === '腹筋ローラー') {
+    const r = document.getElementById('exReps').value;
+    const s = document.getElementById('exSets').value;
+    detail = `${r}回×${s}セット`;
+  } else {
+    const w = document.getElementById('exWeight').value;
+    const r = document.getElementById('exReps').value;
+    const s = document.getElementById('exSets').value;
+    detail = `${w}kg×${r}回×${s}セット`;
   }
 
   const exercises = DB.get('exercises');
-  exercises.push({ id: Date.now(), date, type, duration, calorie, memo });
+  exercises.push({ id: Date.now(), date, type, detail, calorie, memo });
   DB.set('exercises', exercises);
 
-  document.getElementById('exerciseDuration').value = '';
-  document.getElementById('exerciseCalorie').value = '';
+  document.getElementById('walkSteps').value = '8000';
   document.getElementById('exerciseMemo').value = '';
-  showToast(`✅ ${type} ${duration}分 を記録しました`);
+  document.getElementById('exerciseCalorie').value = '';
+  document.getElementById('exerciseCalorieValue').textContent = '-- kcal';
+  const def = EXERCISE_DEFAULTS[type] || { weight: 30, reps: 10, sets: 3 };
+  document.getElementById('exWeight').value = def.weight || '';
+  document.getElementById('exReps').value = def.reps;
+  document.getElementById('exSets').value = def.sets;
+  calcWeightCalories();
+  showToast(`✅ ${type} ${detail} を記録しました`);
   renderExerciseHistory();
+}
+
+function exerciseSubLabel(e) {
+  const parts = [];
+  if (e.detail) parts.push(e.detail);
+  if (e.memo) parts.push(e.memo);
+  // 旧データ互換
+  if (!e.detail && e.duration) parts.push(`${e.duration}分`);
+  return parts.join(' · ');
 }
 
 function renderExerciseHistory() {
   const today = getTodayStr();
   const exercises = DB.get('exercises');
 
-  // 今日の運動
   const todayExercises = exercises.filter(e => e.date === today);
   const todayContainer = document.getElementById('todayExercises');
   const totalEl = document.getElementById('todayTotalExercise');
@@ -622,7 +904,7 @@ function renderExerciseHistory() {
       <div class="history-item">
         <div class="history-item-info">
           <div class="history-item-main">${e.type}</div>
-          <div class="history-item-sub">${e.duration}分${e.memo ? ' · ' + e.memo : ''}</div>
+          <div class="history-item-sub">${exerciseSubLabel(e)}</div>
         </div>
         <div class="history-item-value">${e.calorie} kcal</div>
         <button class="btn-delete" onclick="deleteExercise(${e.id})">削除</button>
@@ -631,7 +913,6 @@ function renderExerciseHistory() {
     totalEl.textContent = `合計消費: ${total} kcal`;
   }
 
-  // 過去の記録
   const pastExercises = exercises.filter(e => e.date !== today).reverse();
   const histContainer = document.getElementById('exerciseHistory');
 
@@ -643,7 +924,6 @@ function renderExerciseHistory() {
       if (!grouped[e.date]) grouped[e.date] = [];
       grouped[e.date].push(e);
     });
-
     histContainer.innerHTML = Object.entries(grouped).map(([date, items]) => {
       const total = items.reduce((s, e) => s + e.calorie, 0);
       return `
