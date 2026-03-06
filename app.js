@@ -33,8 +33,54 @@ document.addEventListener('DOMContentLoaded', () => {
   renderExerciseHistory();
   renderSleepHistory();
   updateSleepPreview();
+  initSteppers();
   registerSW();
 });
+
+// ===== カスタムステッパー =====
+function initSteppers() {
+  const configs = [
+    { id: 'weightInput',      stepperStep: 0.1 },
+    { id: 'walkSteps',        stepperStep: 500  },
+    { id: 'exWeight',         stepperStep: 5    },
+    { id: 'exReps',           stepperStep: 1    },
+    { id: 'exSets',           stepperStep: 1    },
+    { id: 'mealCalorie',      stepperStep: 50   },
+    { id: 'targetSleepInput', stepperStep: 0.5  },
+  ];
+  configs.forEach(({ id, stepperStep }) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input._stepperStep = stepperStep;
+
+    const btnMinus = document.createElement('button');
+    btnMinus.type = 'button';
+    btnMinus.className = 'stepper-btn';
+    btnMinus.textContent = '−';
+    btnMinus.addEventListener('click', () => adjustStepper(input, -1));
+
+    const btnPlus = document.createElement('button');
+    btnPlus.type = 'button';
+    btnPlus.className = 'stepper-btn';
+    btnPlus.textContent = '+';
+    btnPlus.addEventListener('click', () => adjustStepper(input, 1));
+
+    input.parentNode.insertBefore(btnMinus, input);
+    input.after(btnPlus);
+    input.classList.add('stepper-input');
+  });
+}
+
+function adjustStepper(input, dir) {
+  const step = input._stepperStep || 1;
+  const min = input.min !== '' ? parseFloat(input.min) : -Infinity;
+  const max = input.max !== '' ? parseFloat(input.max) : Infinity;
+  const current = parseFloat(input.value) || 0;
+  const newVal = Math.min(max, Math.max(min, current + dir * step));
+  const decimals = (step.toString().split('.')[1] || '').length;
+  input.value = newVal.toFixed(decimals);
+  input.dispatchEvent(new Event('input'));
+}
 
 function registerSW() {
   if ('serviceWorker' in navigator) {

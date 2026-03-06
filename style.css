@@ -503,6 +503,35 @@ html, body {
   white-space: nowrap;
 }
 
+/* ===== カスタムステッパー ===== */
+.stepper-btn {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  border: 1.5px solid var(--border);
+  background: #f8fafc;
+  border-radius: 10px;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background 0.15s;
+  touch-action: manipulation;
+}
+.stepper-btn:active {
+  background: #e2e8f0;
+}
+.stepper-input {
+  text-align: center !important;
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+
 /* ===== ボタン ===== */
 .btn-primary {
   width: 100%;
