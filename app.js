@@ -92,6 +92,8 @@ function loadSettings() {
 }
 
 // ===== タブ切り替え =====
+const TAB_ORDER = ['dashboard', 'weight', 'meal', 'exercise', 'sleep'];
+
 function showTab(tabName) {
   document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -102,6 +104,36 @@ function showTab(tabName) {
     updateDashboard();
   }
 }
+
+function getCurrentTab() {
+  const active = document.querySelector('.nav-btn.active');
+  return active ? active.dataset.tab : 'dashboard';
+}
+
+// スワイプでタブ切り替え
+(function() {
+  let startX = 0;
+  let startY = 0;
+  const main = document.querySelector('.main-content');
+
+  main.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+
+  main.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
+
+    const current = TAB_ORDER.indexOf(getCurrentTab());
+    if (dx < 0 && current < TAB_ORDER.length - 1) {
+      showTab(TAB_ORDER[current + 1]);
+    } else if (dx > 0 && current > 0) {
+      showTab(TAB_ORDER[current - 1]);
+    }
+  }, { passive: true });
+})();
 
 // ===== トースト通知 =====
 function showToast(msg) {
